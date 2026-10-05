@@ -1,0 +1,18 @@
+# Render Blueprint: New > Blueprint > pick this repo. Render builds the Dockerfile
+# (Flutter web + API) and asks you for DATABASE_URL (your Supabase connection string).
+services:
+  - type: web
+    name: lenden
+    runtime: docker
+    plan: free
+    region: singapore          # closest to Bangladesh; create the Supabase project in Singapore too
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false            # paste the Supabase *session pooler* URI when prompted
+      - key: LENDEN_JWT_SECRET
+        generateValue: true    # Render creates a random secret
+      - key: LENDEN_SEED_DEMO
+        value: "1"             # fill an empty database with demo data on first start
