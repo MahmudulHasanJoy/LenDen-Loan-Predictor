@@ -1,0 +1,155 @@
+{
+  "trained_at": "2026-10-02T22:52:49+00:00",
+  "version": "1.0.0",
+  "n_train": 204277,
+  "n_test": 51070,
+  "default_rate": 0.1161,
+  "costs": {
+    "false_negative": 10000,
+    "false_positive": 500
+  },
+  "champion": "HistGB (balanced)",
+  "threshold": 0.27,
+  "models": {
+    "LogReg (balanced)": {
+      "threshold": 0.28,
+      "oof_cost_train": 80165500.0,
+      "roc_auc_test": 0.7532,
+      "pr_auc_test": 0.3105,
+      "cost_test": 20112000
+    },
+    "HistGB (balanced)": {
+      "threshold": 0.27,
+      "oof_cost_train": 80101000.0,
+      "roc_auc_test": 0.7576,
+      "pr_auc_test": 0.3299,
+      "cost_test": 19955500
+    },
+    "RandomForest": {
+      "threshold": 0.25,
+      "oof_cost_train": 80478000.0,
+      "roc_auc_test": 0.7557,
+      "pr_auc_test": 0.3255,
+      "cost_test": 20201000
+    }
+  },
+  "test": {
+    "roc_auc": 0.7576,
+    "pr_auc": 0.3299,
+    "brier_raw": 0.1964,
+    "brier_calibrated": 0.0908,
+    "cost_approve_all": 59310000,
+    "cost_model": 19955500,
+    "savings": 39354500,
+    "savings_pct": 0.6635,
+    "review_rate": 0.7216
+  },
+  "fairness": {
+    "AgeBand": [
+      {
+        "group": "18-25",
+        "n": 7801,
+        "actual_default_rate": 0.2073,
+        "approval_rate": 0.0354,
+        "false_negative_rate": 0.0068,
+        "false_positive_rate": 0.9571,
+        "disparate_impact": 0.0609,
+        "passes_4_5ths": false
+      },
+      {
+        "group": "26-35",
+        "n": 9896,
+        "actual_default_rate": 0.1647,
+        "approval_rate": 0.0861,
+        "false_negative_rate": 0.0196,
+        "false_positive_rate": 0.9008,
+        "disparate_impact": 0.1482,
+        "passes_4_5ths": false
+      },
+      {
+        "group": "36-45",
+        "n": 9981,
+        "actual_default_rate": 0.1164,
+        "approval_rate": 0.1935,
+        "false_negative_rate": 0.0577,
+        "false_positive_rate": 0.7886,
+        "disparate_impact": 0.333,
+        "passes_4_5ths": false
+      },
+      {
+        "group": "46-55",
+        "n": 9779,
+        "actual_default_rate": 0.0824,
+        "approval_rate": 0.3322,
+        "false_negative_rate": 0.1266,
+        "false_positive_rate": 0.6493,
+        "disparate_impact": 0.5719,
+        "passes_4_5ths": false
+      },
+      {
+        "group": "56-69",
+        "n": 13613,
+        "actual_default_rate": 0.0526,
+        "approval_rate": 0.5809,
+        "false_negative_rate": 0.3017,
+        "false_positive_rate": 0.4036,
+        "disparate_impact": 1.0,
+        "passes_4_5ths": true
+      }
+    ],
+    "MaritalStatus": [
+      {
+        "group": "Divorced",
+        "n": 17001,
+        "actual_default_rate": 0.1271,
+        "approval_rate": 0.2627,
+        "false_negative_rate": 0.0666,
+        "false_positive_rate": 0.7088,
+        "disparate_impact": 0.8702,
+        "passes_4_5ths": true
+      },
+      {
+        "group": "Married",
+        "n": 17041,
+        "actual_default_rate": 0.0999,
+        "approval_rate": 0.3019,
+        "false_negative_rate": 0.074,
+        "false_positive_rate": 0.6729,
+        "disparate_impact": 1.0,
+        "passes_4_5ths": true
+      },
+      {
+        "group": "Single",
+        "n": 17028,
+        "actual_default_rate": 0.1214,
+        "approval_rate": 0.2705,
+        "false_negative_rate": 0.0764,
+        "false_positive_rate": 0.7027,
+        "disparate_impact": 0.8961,
+        "passes_4_5ths": true
+      }
+    ],
+    "HasDependents": [
+      {
+        "group": "No",
+        "n": 25604,
+        "actual_default_rate": 0.1258,
+        "approval_rate": 0.2386,
+        "false_negative_rate": 0.0615,
+        "false_positive_rate": 0.7359,
+        "disparate_impact": 0.7495,
+        "passes_4_5ths": false
+      },
+      {
+        "group": "Yes",
+        "n": 25466,
+        "actual_default_rate": 0.1064,
+        "approval_rate": 0.3183,
+        "false_negative_rate": 0.0849,
+        "false_positive_rate": 0.6538,
+        "disparate_impact": 1.0,
+        "passes_4_5ths": true
+      }
+    ]
+  }
+}
