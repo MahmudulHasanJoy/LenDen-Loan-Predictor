@@ -11,6 +11,38 @@ Time: about 30 minutes, mostly waiting for the first build. Cost: free.
 
 ---
 
+## Current deployment
+
+| Piece | Where |
+|---|---|
+| App + API | Render web service **`lenden`** (Singapore, free, Docker): https://lenden-qydc.onrender.com |
+| Source | GitHub `MahmudulHasanJoy/LenDen-Loan-Predictor`, branch `main` |
+| Database | Supabase project **`loanready`** (Singapore), tables created by migration `loanready_initial_schema` with row-level security on |
+| Secrets | `LENDEN_JWT_SECRET` (random, set in Render), `DATABASE_URL` (see below) |
+
+Pushing to `main` redeploys automatically. A **force** push may not, so use **Manual Deploy → Deploy latest commit** in Render if needed.
+
+### Connect the Render service to Supabase
+
+Until `DATABASE_URL` is set, the server uses a temporary built-in SQLite database that resets
+whenever Render restarts. To store data permanently in Supabase:
+
+1. **Set a database password.** In Supabase, open the `loanready` project and go to
+   **Project Settings → Database → Reset database password**. Save the new password somewhere safe.
+2. **Copy the connection string.** Click **Connect → Session pooler** and copy the **URI**.
+   Replace `[YOUR-PASSWORD]` with the new password (no brackets).
+3. **Add it to Render.** Open the **`lenden`** service, go to **Environment → Add environment variable**,
+   and set **Key** `DATABASE_URL` and **Value** the URI from step 2. Click **Save, rebuild and deploy**.
+4. **Check it worked.**
+   - https://lenden-qydc.onrender.com/health should show `"database": "postgres"`.
+   - The Render logs should show `LenDen: demo data created.`
+   - Supabase **Table Editor** should show rows in `orgs`, `users` and `applications`.
+
+Never commit the connection string or paste it into chats. If it leaks, reset the database
+password and update the Render variable.
+
+---
+
 ## 1. Put the project on GitHub (5 min)
 
 The `LenDen` folder is already a Git repository with the full commit history (30 commits).

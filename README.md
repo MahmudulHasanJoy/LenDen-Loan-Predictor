@@ -12,6 +12,22 @@ one Flutter app that serves four roles.
 
 > Educational project on a public **synthetic** dataset. Not a lending decision system.
 
+## Live demo
+
+**[lenden-qydc.onrender.com](https://lenden-qydc.onrender.com)** hosts the web app (all four roles) and the API ([`/docs`](https://lenden-qydc.onrender.com/docs)).
+It runs on Render's free tier, so the first visit after 15 idle minutes can take up to a minute to wake the server.
+
+Log in with the one-tap demo chips on the login screen, or type an account below. **The password for every demo account is `demo1234`.**
+
+| Role | Email | What to try |
+|---|---|---|
+| Borrower | `borrower1@demo.app` (up to `borrower200@demo.app`) | Readiness check, "Try it" tips, apply to a lender, track the decision |
+| Loan officer | `mahmud@greenfield.demo` | Risk-sorted queue, reasons, approve / ask for documents / reject |
+| Lender admin | `admin@greenfield.demo` | Dashboard, fairness and drift monitors, decision rules, team, activity log |
+| Platform owner | `super@lenden.app` | Lender organisations, plans, platform totals |
+
+You can also run a readiness check **without an account** from the landing page.
+
 ## The product
 
 | Role | What they do |
