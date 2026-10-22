@@ -1,106 +1,89 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:lenden/core/api.dart';
+import 'package:lenden/core/auth/session.dart';
 import 'package:lenden/core/format.dart';
-import 'package:lenden/core/session.dart';
-import 'package:lenden/core/theme.dart';
-import 'package:lenden/models/field_spec.dart';
-import 'package:lenden/screens/borrower/emi_screen.dart';
-import 'package:lenden/screens/borrower/readiness_screen.dart';
+import 'package:lenden/core/l10n/l10n.dart';
+import 'package:lenden/core/theme/theme.dart';
+import 'package:lenden/features/borrower/borrower_shell.dart';
+import 'package:lenden/features/onboarding/welcome_screen.dart';
+import 'package:lenden/shared/models/metadata.dart';
+import 'package:lenden/shared/widgets/explain.dart';
+import 'package:lenden/shared/widgets/odds.dart';
 
-const _readiness = <String, dynamic>{
-  'light': 'red',
-  'title': 'High risk: wait or change the loan',
-  'message': 'Lenders are likely to hesitate.',
-  'default_probability': 0.2286,
-  'tips': [
-    {
-      'feature': 'LoanAmount',
-      'change': {'LoanAmount': 60000.0},
-      'text': 'Borrow 60,000 instead of 120,000',
-      'new_probability': 0.2018,
-      'new_light': 'red',
-      'points_lower': 2.7,
-    },
-    {
-      'feature': 'HasCoSigner',
-      'change': {'HasCoSigner': 'Yes'},
-      'text': 'Apply with a co-signer',
-      'new_probability': 0.2018,
-      'new_light': 'red',
-      'points_lower': 2.7,
-    },
-  ],
-  'plan': {
-    'steps': ['Borrow 60,000 instead of 120,000', 'Apply with a co-signer'],
-    'new_probability': 0.1258,
-    'new_light': 'yellow',
-    'points_lower': 10.3,
-  },
-  'affordability': {
-    'monthly_payment': 3079.95,
-    'total_repayment': 184796.71,
-    'total_interest': 64796.71,
-    'income_share': 0.8213,
-    'level': 'risky',
-    'note': 'The instalment takes more than 40% of your income.',
-  },
-};
-
-Widget _wrap(Widget child) => AppScope(
-      session: Session(Api(baseUrl: 'http://localhost:8000')),
-      child: MaterialApp(theme: AppTheme.light(googleFonts: false), home: child),
-    );
+Future<Widget> _wrap(Widget child, {String locale = 'en'}) async {
+  SharedPreferences.setMockInitialValues({Keys.locale: locale});
+  final prefs = await SharedPreferences.getInstance();
+  return ProviderScope(
+    overrides: [prefsProvider.overrideWithValue(prefs)],
+    child: Consumer(builder: (context, ref, _) {
+      return MaterialApp(
+        theme: AppTheme.light(googleFonts: false),
+        locale: ref.watch(localeProvider),
+        supportedLocales: L10n.supported,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: child,
+      );
+    }),
+  );
+}
 
 void main() {
-  test('formatters', () {
-    expect(money(45000), '\$45,000');
-    expect(money(1250000), '\$1,250,000');
+  test('money uses Taka and South Asian grouping', () {
+    expect(money(120000), '৳1,20,000');
+    expect(money(1250000, currency: 'USD'), '\$1,250,000');
+    expect(money(45000, lang: 'bn'), '৳৪৫,০০০');
     expect(pct(0.1378), '13.8%');
-    expect(formatValue('InterestRate', 14.5), '14.5%');
-    expect(formatValue('DTIRatio', 0.4), '0.40');
-    expect(formatValue('Education', 'PhD'), 'PhD');
-    expect(shortDate('2026-10-05T09:00:00+00:00'), contains('2026'));
   });
 
-  test('EMI matches the API formula', () {
-    expect(emi(100000, 12, 12).toStringAsFixed(2), '8884.88');
-    expect(emi(1200, 0, 12), 100);
+  test('strings exist in both languages and fall back to English', () {
+    expect(L10n.lookup('bn', 'odds.good'), 'ভালো');
+    expect(L10n.lookup('en', 'common.months', {'n': 12}), '12 months');
+    expect(L10n.lookup('xx', 'odds.low'), 'Low');
+    expect(L10n.lookup('en', 'no.such.key'), 'no.such.key');
   });
 
-  test('FieldSpec parses integer options and categories', () {
-    final term = FieldSpec.fromJson({
-      'name': 'LoanTerm',
-      'label': 'Loan term (months)',
-      'type': 'integer',
-      'min': 12.0,
-      'max': 60.0,
-      'options': [12, 24, 36, 48, 60],
-      'default': 36.0,
-    });
-    expect(term.options, [12, 24, 36, 48, 60]);
-    expect(term.defaultValue, 36);
+  test('field spec snaps integer defaults to an allowed option', () {
+    final f = FieldSpec.fromJson({'name': 'LoanTerm', 'type': 'integer', 'min': 12, 'max': 60,
+      'options': [12, 24, 36, 48, 60], 'default': 37.4});
+    expect(f.defaultValue, 36);
   });
 
-  testWidgets('Readiness result shows light, tips, plan and affordability', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 2400));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(_wrap(ReadinessScreen(
-      inputs: const {'LoanAmount': 120000},
-      result: _readiness,
+  test('navigation index picks the longest matching path', () {
+    const items = [NavItem('/staff', 'q', Icons.inbox, Icons.inbox), NavItem('/staff/dashboard', 'd', Icons.insights, Icons.insights)];
+    expect(navIndex(items, '/staff/applications/3'), 0);
+    expect(navIndex(items, '/staff/dashboard'), 1);
+  });
+
+  testWidgets('welcome screen speaks English and Bangla', (tester) async {
+    await tester.pumpWidget(await _wrap(const WelcomeScreen()));
+    expect(find.text('Check my chances'), findsOneWidget);
+    await tester.tap(find.text('বাংলা'));
+    await tester.pumpAndSettle();
+    expect(find.text('আমার সম্ভাবনা দেখুন'), findsOneWidget);
+  });
+
+  testWidgets('odds hero and next step card render codes as words', (tester) async {
+    await tester.pumpWidget(await _wrap(Scaffold(
+      body: ListView(children: const [
+        OddsHero(odds: 'fair'),
+        NextStepCard(step: {
+          'odds': 'good',
+          'changes': [
+            {'feature': 'HasCoSigner', 'code': 'ADD_COSIGNER', 'from': 'No', 'to': 'Yes'}
+          ],
+        }),
+      ]),
     )));
-    await tester.pump();
-    expect(find.byKey(const Key('light-title')), findsOneWidget);
-    expect(find.text('Apply with a co-signer'), findsWidgets);
-    expect(find.text('Best combined plan'), findsOneWidget);
-    expect(find.textContaining('per month'), findsOneWidget);
-    expect(find.byKey(const Key('apply')), findsOneWidget);
-  });
-
-  testWidgets('EMI screen updates the monthly payment', (tester) async {
-    await tester.pumpWidget(_wrap(const EmiScreen()));
-    await tester.pump();
-    expect(find.byKey(const Key('emi-value')), findsOneWidget);
+    expect(find.text('Fair'), findsOneWidget);
+    expect(find.text('Apply with a co-signer'), findsOneWidget);
+    expect(find.text('Good'), findsOneWidget);
   });
 }

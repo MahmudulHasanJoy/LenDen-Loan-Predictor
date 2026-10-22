@@ -1,7 +1,7 @@
 name: lenden
-description: LenDen - loan readiness for borrowers, review panels for lenders.
+description: LenDen - check your loan chances, compare offers, apply and repay; review panels for lenders.
 publish_to: "none"
-version: 2.0.0+2
+version: 3.0.0+3
 
 environment:
   sdk: ">=3.7.0 <4.0.0"
@@ -10,9 +10,16 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  flutter_riverpod: ^2.6.1
+  go_router: ^14.8.1
   http: ^1.2.2
+  http_parser: ^4.1.2
   shared_preferences: ^2.3.2
   google_fonts: ^6.2.1
+  file_picker: ^8.1.7
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:

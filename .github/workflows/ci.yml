@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
 
 jobs:
@@ -30,8 +30,13 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -r requirements-api.txt pytest httpx
-      - run: pytest -q
+      - run: pip install -r requirements-api.txt pytest httpx pyflakes pip-audit
+      - name: Lint
+        run: python -m pyflakes src api tests
+      - name: Tests (includes model quality and fairness checks)
+        run: pytest -q
+      - name: Dependency audit
+        run: pip-audit -r requirements-api.txt || echo "::warning::pip-audit reported issues"
 
   flutter:
     name: Flutter analyze, test, web build

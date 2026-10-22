@@ -1,0 +1,168 @@
+{
+  "trained_at": "2026-10-22T08:43:46+00:00",
+  "version": "1.0.0",
+  "n_train": 204277,
+  "n_test": 51070,
+  "default_rate": 0.1161,
+  "costs": {
+    "false_negative": 10000,
+    "false_positive": 500
+  },
+  "champion": "HistGB (balanced)",
+  "features": [
+    "Income",
+    "LoanAmount",
+    "CreditScore",
+    "MonthsEmployed",
+    "NumCreditLines",
+    "InterestRate",
+    "LoanTerm",
+    "DTIRatio",
+    "Education",
+    "EmploymentType",
+    "HasMortgage",
+    "LoanPurpose",
+    "HasCoSigner"
+  ],
+  "excluded_features": [
+    "Age",
+    "MaritalStatus",
+    "HasDependents"
+  ],
+  "threshold": 0.29,
+  "models": {
+    "LogReg (balanced)": {
+      "threshold": 0.26,
+      "oof_cost_train": 86341500.0,
+      "roc_auc_test": 0.7012,
+      "pr_auc_test": 0.2473,
+      "cost_test": 21682000
+    },
+    "HistGB (balanced)": {
+      "threshold": 0.29,
+      "oof_cost_train": 85922000.0,
+      "roc_auc_test": 0.7064,
+      "pr_auc_test": 0.2699,
+      "cost_test": 21475500
+    }
+  },
+  "test": {
+    "roc_auc": 0.7064,
+    "pr_auc": 0.2699,
+    "brier_raw": 0.2133,
+    "brier_calibrated": 0.0952,
+    "cost_approve_all": 59310000,
+    "cost_model": 21475500,
+    "savings": 37834500,
+    "savings_pct": 0.6379,
+    "review_rate": 0.8095
+  },
+  "fairness": {
+    "AgeBand": [
+      {
+        "group": "18-25",
+        "n": 7801,
+        "actual_default_rate": 0.2073,
+        "approval_rate": 0.1923,
+        "false_negative_rate": 0.0612,
+        "false_positive_rate": 0.7734,
+        "disparate_impact": 0.9818,
+        "passes_4_5ths": true
+      },
+      {
+        "group": "26-35",
+        "n": 9896,
+        "actual_default_rate": 0.1647,
+        "approval_rate": 0.1928,
+        "false_negative_rate": 0.0564,
+        "false_positive_rate": 0.7803,
+        "disparate_impact": 0.9845,
+        "passes_4_5ths": true
+      },
+      {
+        "group": "36-45",
+        "n": 9981,
+        "actual_default_rate": 0.1164,
+        "approval_rate": 0.185,
+        "false_negative_rate": 0.062,
+        "false_positive_rate": 0.7988,
+        "disparate_impact": 0.9444,
+        "passes_4_5ths": true
+      },
+      {
+        "group": "46-55",
+        "n": 9779,
+        "actual_default_rate": 0.0824,
+        "approval_rate": 0.1848,
+        "false_negative_rate": 0.062,
+        "false_positive_rate": 0.8042,
+        "disparate_impact": 0.9435,
+        "passes_4_5ths": true
+      },
+      {
+        "group": "56-69",
+        "n": 13613,
+        "actual_default_rate": 0.0526,
+        "approval_rate": 0.1958,
+        "false_negative_rate": 0.0642,
+        "false_positive_rate": 0.7969,
+        "disparate_impact": 1.0,
+        "passes_4_5ths": true
+      }
+    ],
+    "MaritalStatus": [
+      {
+        "group": "Divorced",
+        "n": 17001,
+        "actual_default_rate": 0.1271,
+        "approval_rate": 0.1949,
+        "false_negative_rate": 0.0597,
+        "false_positive_rate": 0.7854,
+        "disparate_impact": 1.0,
+        "passes_4_5ths": true
+      },
+      {
+        "group": "Married",
+        "n": 17041,
+        "actual_default_rate": 0.0999,
+        "approval_rate": 0.188,
+        "false_negative_rate": 0.0541,
+        "false_positive_rate": 0.7972,
+        "disparate_impact": 0.9642,
+        "passes_4_5ths": true
+      },
+      {
+        "group": "Single",
+        "n": 17028,
+        "actual_default_rate": 0.1214,
+        "approval_rate": 0.1885,
+        "false_negative_rate": 0.0667,
+        "false_positive_rate": 0.7947,
+        "disparate_impact": 0.9671,
+        "passes_4_5ths": true
+      }
+    ],
+    "HasDependents": [
+      {
+        "group": "No",
+        "n": 25604,
+        "actual_default_rate": 0.1258,
+        "approval_rate": 0.19,
+        "false_negative_rate": 0.0612,
+        "false_positive_rate": 0.7914,
+        "disparate_impact": 0.9956,
+        "passes_4_5ths": true
+      },
+      {
+        "group": "Yes",
+        "n": 25466,
+        "actual_default_rate": 0.1064,
+        "approval_rate": 0.1909,
+        "false_negative_rate": 0.0598,
+        "false_positive_rate": 0.7935,
+        "disparate_impact": 1.0,
+        "passes_4_5ths": true
+      }
+    ]
+  }
+}

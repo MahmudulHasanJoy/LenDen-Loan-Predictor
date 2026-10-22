@@ -1,25 +1,40 @@
 # LenDen app (Flutter)
 
-One Flutter codebase, four experiences. The screen you see depends on who logs in:
+One Flutter codebase for web and Android, in **English and Bangla**. What you see depends on who logs in.
 
 | Role | Experience | Best on |
 |---|---|---|
-| **Visitor / Borrower** | Landing page → readiness check (🟢🟡🔴) → "what you can change" tips with one-tap *Try it* → affordability → apply to a lender with consent → track status and lender messages · EMI calculator | Phone |
-| **Loan officer** | Risk-sorted application queue (filters, sort) → application detail with model recommendation, reasons and inputs → Approve / Ask for documents / Reject with a note · Dashboard | Tablet / web |
-| **Lender admin** | Everything officers have, plus: dashboard (KPIs, readiness mix, 14-day trend, **fairness monitor**, **drift monitor**), decision rules (cost ratio, review cap), team management, activity log | Web |
-| **Platform owner** | Platform totals, lender organisations (tenants) and plans, create / suspend lenders | Web |
+| **Visitor / Borrower** | Landing page → 4-step check with autosave (no account needed) → approval odds, instalment and the smallest change that would help → live simulator → offers from every lender → apply with consent → status timeline, document upload, inbox → loan schedule, payments, credit level | Phone |
+| **Loan officer** | Queue with filters (status, mine/unassigned, odds), sorting by risk or SLA → claim → reasons, counterfactual, similar decisions, shadow score, documents, timeline → approve with terms, request documents, decline with reason codes · Dashboard · Portfolio | Tablet / web |
+| **Lender admin** | Everything officers have, plus decision settings (cost ratio, review cap, SLA), offer rules and ladder caps, team, activity log, fairness details | Web |
+| **Platform owner** | Funnel and drop-off, lenders, model registry (candidate → shadow → active, comparison report), feature flags, background jobs | Web |
 
-On wide screens (900 px and up) staff get a SaaS-style **sidebar**; on phones a bottom navigation bar.
+## Code layout
+
+```
+lib/
+  app/        app.dart (MaterialApp.router, locales), router.dart (go_router, role-based redirects)
+  core/       api/ (client: refresh tokens, draft token, idempotency, uploads), auth/ (session, locale),
+              l10n/ (strings_en.dart, strings_bn.dart, generated), theme/, format.dart (Taka, Bangla digits)
+  shared/     models/ (metadata), widgets/ (odds, offers, explanations, timeline, field inputs, common)
+  features/   onboarding · auth · readiness (wizard, simulator) · offers · applications · loans ·
+              notifications · account · borrower · staff · platform
+tool/strings.py   source of all strings in both languages: edit it, then run `python tool/strings.py`
+```
+
+State lives in Riverpod providers; each screen loads its data through a `FutureProvider` and
+refreshes with `ref.invalidate`. The API only sends codes (statuses, reason codes, errors); the app
+translates them, so changing the language never needs a server change.
 
 ## Design system
 
-`lib/core/theme.dart` defines everything visual in one place, following common patterns of
+`lib/core/theme/theme.dart` defines everything visual in one place, following common patterns of
 modern fintech/SaaS dashboards:
 
 - **Palette:** deep-teal brand colour, neutral grey canvas, white cards with a 1 px border, and
   semantic colours used consistently: green = ready / approved, amber = borderline,
   red = high risk / rejected, blue = submitted, violet = documents needed
-- **Typography:** Inter (via `google_fonts`), tight headings, muted secondary text
+- **Typography:** Inter for English and Hind Siliguri for Bangla (via `google_fonts`)
 - **Components:** flat outlined cards (radius 14), filled inputs, 48 px buttons, floating
   snackbars, rounded dialogs and sheets, tinted icon tiles, KPI cards
 - **Light and dark mode** follow the device setting
@@ -53,7 +68,9 @@ The login screen has one-tap chips for these:
 | Lender admin | `admin@greenfield.demo`, `admin@riverside.demo` |
 | Platform owner | `super@lenden.app` |
 
-Visitors can run a readiness check **without an account**. They are asked to log in only when they apply.
+Visitors can run the whole check **without an account**; their answers carry over when they sign up.
+Demo borrowers can also log in by mobile number (`01700000001` for borrower 1, `01700000002` for
+borrower 2, ...): the demo shows the one-time code on screen.
 
 ### Android / iOS: allow HTTP to a local API
 
@@ -67,7 +84,7 @@ Only needed for local development. A deployed `https://` API needs nothing.
 
 ### Server address
 
-Tap the server icon on the welcome screen (or *Server settings* in the account menu):
+Tap the server icon on the login screen (or *Server* in Account):
 
 | Running on | Address |
 |---|---|
@@ -79,31 +96,9 @@ Tap the server icon on the welcome screen (or *Server settings* in the account m
 ## Tests
 
 ```bash
-flutter test       # formatters, EMI maths, schema parsing, readiness and EMI screen widget tests
+flutter test       # formatters (Taka, Bangla digits), strings, schema parsing, welcome and odds widgets
 flutter analyze
 ```
 
-## Code map
-
-```
-lib/
-  main.dart                         theme + RoleRouter (picks the shell by role)
-  core/  api.dart                   JSON client, bearer token, readable errors
-         session.dart               login/register/logout, saved token, AppScope
-         theme.dart                 design system: colours, spacing, component themes
-         format.dart                money, %, dates, light and status styles
-  models/field_spec.dart            form schema from /metadata
-  widgets/ brand.dart               logo, page header, icon tile, greeting
-           common.dart              Loader, error/retry, KPI card, badges, chips
-           field_input.dart         slider / segmented / dropdown per field
-           account_menu.dart        avatar menu (server settings, log out)
-           risk_gauge.dart          circular probability gauge
-  screens/
-    welcome_screen.dart             public landing page
-    server_screen.dart              API address
-    auth/                           login (with demo chips), register
-    borrower/                       home tabs, check, result + apply sheet, my applications, EMI
-    staff/                          shell (sidebar/bottom bar), queue, detail, dashboard,
-                                    decision rules, team, activity log
-    superadmin/super_console.dart   tenants, plans, platform totals
-```
+Add a string: put it in `tool/strings.py` (both languages), run `python tool/strings.py`, and use it
+with `context.t('your.key')`.

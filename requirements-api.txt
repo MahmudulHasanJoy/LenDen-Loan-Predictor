@@ -1,7 +1,8 @@
 # Minimal set to serve the platform (used by the Dockerfile)
-fastapi>=0.110
+fastapi>=0.115
 uvicorn[standard]>=0.29
 pydantic>=2.6
+python-multipart>=0.0.9   # document uploads
 PyJWT>=2.8
 psycopg[binary]>=3.1     # PostgreSQL / Supabase
 scikit-learn==1.9.1

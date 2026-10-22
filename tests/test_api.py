@@ -11,8 +11,8 @@ pytestmark = pytest.mark.skipif(not MODEL_PATH.exists(), reason="train the fair 
 INPUTS = {
     "Income": 45000, "LoanAmount": 120000, "CreditScore": 610, "MonthsEmployed": 24,
     "NumCreditLines": 2, "InterestRate": 18.5, "LoanTerm": 60, "DTIRatio": 0.65,
-    "Education": "Bachelor's", "EmploymentType": "Part-time", "MaritalStatus": "Single",
-    "HasMortgage": "No", "HasDependents": "No", "LoanPurpose": "Home", "HasCoSigner": "No",
+    "Education": "Bachelor's", "EmploymentType": "Part-time",
+    "HasMortgage": "No", "LoanPurpose": "Home", "HasCoSigner": "No",
 }
 PW = "password123"
 
@@ -32,6 +32,7 @@ def ctx():
     import api.main as m
     p = m.platform
     sup = p._create_user("owner@x.io", "Owner", PW, "superadmin")
+    p.set_flag(sup, "credit_ladder", False)
     org = p.create_org(sup, "Alpha Lending", "pro", "admin@alpha.io", "Alpha Admin", PW)["org"]
     p.add_team_member(p.get_user(p._one("SELECT id FROM users WHERE email='admin@alpha.io'")["id"]),
                       "off@alpha.io", "Alpha Officer", PW)
@@ -49,7 +50,7 @@ def test_health_and_metadata(ctx):
     c = ctx["c"]
     assert c.get("/health").json()["status"] == "ok"
     fields = [f["name"] for f in c.get("/metadata").json()["fields"]]
-    assert "Age" not in fields and len(fields) == 15
+    assert not {"Age", "MaritalStatus", "HasDependents"} & set(fields) and len(fields) == 13
 
 
 def test_public_readiness_and_emi(ctx):
