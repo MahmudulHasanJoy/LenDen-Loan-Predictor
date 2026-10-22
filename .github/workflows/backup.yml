@@ -1,0 +1,32 @@
+# Nightly pg_dump of the production database, kept as a workflow artifact for 7 days.
+# Add DATABASE_URL as a repository secret (Settings > Secrets and variables > Actions) to enable it.
+name: Nightly backup
+
+on:
+  schedule:
+    - cron: "17 20 * * *"     # 02:17 in Dhaka
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip when no database is configured
+        id: check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "skip=1" >> "$GITHUB_OUTPUT"; fi
+      - name: Dump
+        if: steps.check.outputs.skip != '1'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          pg_dump "$DATABASE_URL" --no-owner --no-privileges --format=custom --file=lenden.dump
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.skip != '1'
+        with:
+          name: lenden-backup
+          path: lenden.dump
+          retention-days: 7

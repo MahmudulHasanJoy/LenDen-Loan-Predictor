@@ -1,16 +1,33 @@
-# LenDen: cost-aware, fairness-checked loan screening as a SaaS
+# LenDen: loan chances, offers and fair lending decisions, as a SaaS
 
-**Borrowers find out if they are ready for a loan, and what to change, before they apply.
-Lenders get a risk-sorted review queue with reasons, business-cost controls, and fairness and
-drift monitoring.**
+**Borrowers see their chances of getting a loan in two minutes, what would improve them, and
+estimated offers from every lender, then apply, track and repay. Lenders get a risk-sorted
+queue with plain-language explanations, offer rules, a credit ladder, and fairness and drift
+monitoring.**
 
-LenDen is a multi-tenant platform built around a credit-default model. It started as a
-notebook and grew into a product: an ML package, a FastAPI backend with accounts and roles, and
-one Flutter app that serves four roles.
+LenDen is a multi-tenant platform built around a credit-default model. It started as a notebook
+and grew into a product: an ML package, a FastAPI backend with four roles, and one Flutter app
+(web + Android) in Bangla and English.
 
-![Python](https://img.shields.io/badge/Python-3.12-3776AB) ![scikit-learn](https://img.shields.io/badge/scikit--learn-1.9-F7931E) ![FastAPI](https://img.shields.io/badge/FastAPI-API-009688) ![Flutter](https://img.shields.io/badge/Flutter-mobile%20%2B%20web-02569B) ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E) ![Tests](https://img.shields.io/badge/tests-33%20passing-success) ![License](https://img.shields.io/badge/use-educational-lightgrey)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB) ![scikit-learn](https://img.shields.io/badge/scikit--learn-1.9-F7931E) ![FastAPI](https://img.shields.io/badge/FastAPI-API-009688) ![Flutter](https://img.shields.io/badge/Flutter-web%20%2B%20Android-02569B) ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E) ![Tests](https://img.shields.io/badge/tests-85%20passing-success) ![License](https://img.shields.io/badge/use-educational-lightgrey)
 
-> Educational project on a public **synthetic** dataset. Not a lending decision system.
+> Educational project on a public **synthetic** dataset. It does not lend money or pull real credit reports.
+
+## What's new in v3
+
+| Area | v2 | v3 |
+|---|---|---|
+| Borrower intake | One long form | 4-step wizard with autosave, no account needed to start, Bangla/English |
+| Result | Traffic light + tips | Approval odds, live what-if simulator, the smallest change that improves the odds |
+| Applying | Pick a lender, send the form | Estimated offers from every lender (amount and rate range, instalment), apply to one |
+| Explanations | Top drivers | Reason codes + counterfactuals; declines carry reasons the borrower can read |
+| After approval | Nothing | Loan, repayment schedule, (mock) payments, **credit ladder** (start small, grow) |
+| Lender side | Queue, decide, settings | + claim/assign, SLA timers, document requests and uploads, offer rules, portfolio |
+| Platform | Stats, lenders | + model registry with shadow scoring, feature flags, background jobs, funnel metrics |
+| Model | Trained without Age | Trained **without age, marital status or dependants**: every monitored group now passes the 4/5ths rule |
+| Engineering | One file per layer | Domain modules, versioned migrations, connection pool, refresh tokens, outbox, `/v1` API |
+
+The full design is in the **LenDen v3 Architecture** document; [`CHANGELOG.md`](CHANGELOG.md) lists every change.
 
 ## Live demo
 
@@ -19,49 +36,52 @@ It runs on Render's free tier, so the first visit after 15 idle minutes can take
 
 Log in with the one-tap demo chips on the login screen, or type an account below. **The password for every demo account is `demo1234`.**
 
-| Role | Email | What to try |
+| Role | Account | What to try |
 |---|---|---|
-| Borrower | `borrower1@demo.app` (up to `borrower200@demo.app`) | Readiness check, "Try it" tips, apply to a lender, track the decision |
-| Loan officer | `mahmud@greenfield.demo` | Risk-sorted queue, reasons, approve / ask for documents / reject |
-| Lender admin | `admin@greenfield.demo` | Dashboard, fairness and drift monitors, decision rules, team, activity log |
-| Platform owner | `super@lenden.app` | Lender organisations, plans, platform totals |
+| Borrower | `borrower1@demo.app` … `borrower200@demo.app` (mobile login: `01700000001` …) | Check your chances, move the simulator sliders, compare offers, apply, upload documents, repay, watch the credit level grow |
+| Loan officer | `mahmud@greenfield.demo` | Claim from the queue, read reasons and the counterfactual, ask for documents, approve with terms or decline with reason codes |
+| Lender admin | `admin@greenfield.demo` | Dashboard (SLA, odds mix, fairness, drift), portfolio and arrears, offer rules and ladder caps, team, activity log |
+| Platform owner | `super@lenden.app` | Funnel and drop-off, lenders, model registry (shadow → active), feature flags, background jobs |
 
-You can also run a readiness check **without an account** from the landing page.
+You can run the whole borrower check **without an account** from the landing page; your answers
+carry over when you sign up. In the demo, one-time codes and reset links are shown on screen,
+and only for demo accounts.
 
 ## The product
 
-| Role | What they do |
-|---|---|
-| **Borrower** (free, mobile) | Readiness check with a 🟢🟡🔴 light → concrete tips ("borrow 60,000 instead of 120,000", "add a co-signer") with one-tap re-check → affordability / EMI → apply to a lender with consent → track the decision and the lender's message |
-| **Loan officer** (web / tablet) | Queue sorted by risk → model recommendation (APPROVE / REVIEW), default probability and the top reasons → approve, ask for documents, or reject with a reason. **A person always decides.** |
-| **Lender admin** | KPIs, readiness mix, trend, **fairness monitor** (4/5ths rule by marital status and dependents), **drift monitor** (PSI), decision rules (cost ratio, review cap), team, activity log |
-| **Platform owner** | Lender organisations (tenants), plans, platform totals, suspend / reactivate lenders |
-
 ```mermaid
 flowchart LR
-    B[Borrower app] -->|/readiness /applications| API
-    O[Officer panel] -->|/org/applications| API
-    A[Admin panel] -->|/org/dashboard /org/settings| API
-    S[Owner console] -->|/admin/orgs| API
-    API[FastAPI + JWT roles] --> P[lenden services<br/>tenant isolation, workflow, audit log]
+    B[Borrower app<br/>wizard, simulator, offers,<br/>tracking, repayments] --> API
+    O[Officer panel<br/>queue, explanations, decisions] --> API
+    A[Admin panel<br/>rules, portfolio, fairness, drift] --> API
+    S[Owner console<br/>lenders, models, flags, jobs] --> API
+    API[FastAPI /v1<br/>JWT + refresh tokens, rate limits] --> P[Domain services<br/>drafts, offers, applications,<br/>loans, consents, notifications]
+    P --> E[Decision engine<br/>odds, offers, counterfactuals,<br/>credit ladder, shadow model]
     P --> DB[(Supabase PostgreSQL<br/>SQLite locally)]
-    P --> M[credit_risk model<br/>fairness-aware, calibrated]
+    P --> J[Jobs + outbox<br/>reminders, dues, drift, email]
 ```
 
-**Platform design choices**
+**Design choices**
 
-- **Ships the fairness-aware model.** Notebook 02 showed the dollar-optimal model fails the 4/5ths
-  rule by age (ratio 0.06). The platform model is trained **without `Age`**: every age band is now at
-  0.91 or above, for 2 points less savings (64% vs 66%).
-- **Two views of one model.** Borrowers see a light and *actionable* tips. Tips only touch what a
-  borrower can change (amount, term, co-signer, debt, rate), never who they are. Officers see the
-  calibrated probability, threshold and reasons.
-- **Tenant isolation.** Every lender-owned row carries `org_id`. Officers asking for another
-  lender's application get a 404, not a 403, so nothing leaks. This is covered by tests.
-- **Human-in-the-loop and auditability.** The model only recommends. Rejections require a reason
-  shown to the borrower, and every decision and settings change goes to an audit log.
-- **Honest monitoring.** Drift (PSI) is withheld until 100 applications, because on small samples
-  stable data still scores around 0.15 from noise alone.
+- **Odds relative to each lender.** The label (excellent / good / fair / low) compares the risk
+  score with that lender's own cost-optimal threshold, so it stays honest when a lender tightens
+  policy. The officer queue still shows the calibrated probability and the traffic light.
+- **Only actionable advice.** Tips and counterfactuals change only what a borrower controls (amount,
+  term, co-signer, debt, rate), never who they are. Reason codes never cite protected attributes.
+- **Start small, grow.** New borrowers start at level 1 (10% of a lender's maximum). Repaying on time
+  unlocks 25%, 50% and 100%; a payment missed by 30 days drops a level.
+- **Fairness by design.** The v2 model still failed the 4/5ths rule for marital status (0.76) and
+  dependants (0.62). The v3 model drops both: worst ratio 0.94, for 0.2 points less savings
+  (63.8% vs 64.0%). Optional, self-reported gender and age group are collected only to monitor
+  approval rates and are never shown to officers or used for scoring.
+- **Tenant isolation.** Every lender-owned row carries `org_id`; another lender's application,
+  document or loan returns 404, and tests check it.
+- **Human-in-the-loop and auditability.** The model only recommends. Declines need reason codes,
+  every decision is on the application timeline and in an append-only audit log, and each
+  application stores the model version that scored it.
+- **Production-shaped.** Versioned migrations, pooled connections, rotating refresh tokens with
+  reuse detection, idempotency keys, an outbox for notifications, and a model registry where a new
+  model runs in shadow before it makes decisions.
 
 ---
 
@@ -136,9 +156,10 @@ flowchart LR
 
 ## App
 
-One Flutter codebase for Android, iOS and web, with a custom design system (Inter, teal brand,
-outlined cards, light and dark mode). Staff get a SaaS sidebar on wide screens and a bottom bar on
-phones. See [`mobile/README.md`](mobile/README.md) for setup and demo logins.
+One Flutter codebase for web and Android with feature modules (`lib/features/*`), Riverpod state,
+go_router navigation with deep links, and English/Bangla strings (`tool/strings.py` generates both
+tables). Phones get a bottom bar, wide screens a navigation rail. See
+[`mobile/README.md`](mobile/README.md) for setup.
 
 ## Quick start
 
@@ -147,91 +168,99 @@ phones. See [`mobile/README.md`](mobile/README.md) for setup and demo logins.
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# 2. Run the platform API (demo data is created on first start) -> http://localhost:8000/docs
+# 2. Run the platform API (migrations + demo data on first start) -> http://localhost:8000/docs
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 # 3. Run the app (see mobile/README.md for first-time setup)
 cd mobile && flutter run -d chrome
 
-# 4. Tests
+# 4. Tests (SQLite; set TEST_DATABASE_URL to run them on PostgreSQL too)
 pytest -q
 ```
 
-Demo logins (password `demo1234`): `borrower1@demo.app`, `mahmud@greenfield.demo` (officer),
-`admin@greenfield.demo` (admin), `super@lenden.app` (owner). Reset the demo data with
-`PYTHONPATH=src python -m lenden.seed`.
+Useful commands (with `PYTHONPATH=src`):
+
+| Command | What it does |
+|---|---|
+| `python -m lenden.migrate [--status]` | Apply (or list) database migrations |
+| `python -m lenden.seed [--reset]` | Rebuild the demo data (`--reset` is required for PostgreSQL and deletes everything) |
+| `python -m lenden.jobs --once` | Run every due background job once |
+| `python -m lenden.jobs --run repayment_due` | Run one job now |
 
 **Retrain the models** (needs `Loan_default.csv` from Kaggle `nikhil1e9/loan-default` in `data/`):
 
 ```bash
 PYTHONPATH=src python -m credit_risk.train                                   # research model (all features)
-PYTHONPATH=src python -m credit_risk.train --no-rf --exclude Age \
-    --out artifacts/model_fair.joblib --metrics artifacts/metrics_fair.json   # platform model
+PYTHONPATH=src python -m credit_risk.train --no-rf --exclude Age,MaritalStatus,HasDependents \
+    --out artifacts/model_v3.joblib --metrics artifacts/metrics_v3.json      # platform model (v3)
 ```
 
-Trained artifacts are included, so the API runs without the dataset. Retrain if your
-scikit-learn version differs from 1.9.1.
+A new artifact placed in `artifacts/` appears in the model registry as a candidate; promote it to
+shadow, compare, then make it active from the owner console. Trained artifacts are included, so the
+API runs without the dataset. Retrain if your scikit-learn version differs from 1.9.1.
 
-### API overview (full docs at `/docs`)
+### API overview (`/v1`, full docs at `/docs`)
 
 | Area | Endpoints |
 |---|---|
-| Public | `GET /health` · `GET /metadata` · `GET /lenders` · `POST /readiness` · `POST /emi` |
-| Auth | `POST /auth/register` · `POST /auth/login` · `GET /me` |
-| Borrower | `POST /applications` · `GET /applications/mine` |
-| Officer | `GET /org/applications` · `GET /org/applications/{id}` · `POST /org/applications/{id}/decision` · `GET /org/dashboard` |
-| Lender admin | `GET/PUT /org/settings` · `GET/POST /org/team` · `PATCH /org/team/{id}` · `GET /org/audit` |
-| Platform owner | `GET /admin/stats` · `GET/POST /admin/orgs` · `PATCH /admin/orgs/{id}` |
+| Public | `GET /health` · `GET /metadata` · `GET /lenders` · `POST /readiness` · `POST /simulate` · `POST /emi` · `POST/GET/PUT/DELETE /drafts[/{id}]` · `GET /drafts/{id}/offers` |
+| Auth | `POST /auth/register` · `/auth/login` · `/auth/refresh` · `/auth/logout` · `/auth/password/forgot` · `/auth/password/reset` · `/auth/otp/request` · `/auth/otp/verify` |
+| Me | `GET/PUT /me` · `POST /me/password` · `/me/phone/request` · `/me/phone/verify` · `/me/2fa/setup|enable|disable` · `GET /me/consents` · `POST /me/consents/{id}/revoke` · `GET /me/export` · `POST /me/delete` · `GET /me/levels` · `GET /notifications` |
+| Borrower | `GET /drafts` · `POST /applications` · `GET /applications/mine` · `GET /applications/{id}` · `POST /applications/{id}/withdraw` · `POST /applications/{id}/documents` · `GET /documents/{id}/link` · `GET /loans[/{id}]` · `POST /loans/{id}/repayments` |
+| Officer | `GET /org/applications` · `GET /org/applications/{id}` · `POST …/claim` · `…/release` · `…/decision` · `…/document-requests` · `GET /org/dashboard` · `GET /org/loans[/{id}]` |
+| Lender admin | `GET/PUT /org/settings` · `GET/PUT /org/offer-rules` · `GET/POST/PATCH /org/team` · `GET /org/portfolio` · `GET /org/fairness` · `GET /org/drift` · `GET /org/audit` |
+| Platform owner | `GET /admin/stats` · `GET/POST/PATCH /admin/orgs` · `GET /admin/models` · `POST /admin/models/{id}/promote` · `GET /admin/models/{id}/shadow-report` · `GET/PUT /admin/flags` · `GET /admin/jobs` · `POST /admin/jobs/{name}/run` |
+
+Errors always look like `{"code": "LADDER_LIMIT", "detail": "...", "fields": {...}}`; the apps translate
+`code`. Writes that matter accept an `Idempotency-Key` header. v2 paths (without `/v1`) still work
+for apps already installed.
 
 ### Deploy (free: Supabase + Render)
 
-One Docker image builds the Flutter web app and serves it together with the API, so the whole
-product lives at **one URL**. Data lives in **Supabase PostgreSQL** (`DATABASE_URL`); locally,
-without `DATABASE_URL`, it falls back to SQLite. Full step-by-step guide: **[DEPLOY.md](DEPLOY.md)**.
-
-- `render.yaml` blueprint: Render asks for the Supabase URI and generates the JWT secret
-- Tables are created on first start, with row-level security on (Supabase's public REST API is blocked)
-- Demo data is seeded in the background on an empty database
-- CI runs the full test suite on **SQLite and PostgreSQL 16**, plus the Flutter web build
+One Docker image builds the Flutter web app and serves it with the API, so the whole product lives
+at **one URL**. Data lives in **Supabase PostgreSQL** (`DATABASE_URL`); without it the API falls back to
+SQLite. Step-by-step guide: **[DEPLOY.md](DEPLOY.md)**.
 
 ## Project structure
 
 ```
-├── api/main.py                     FastAPI app: routes per role, JWT auth, error mapping
-├── src/lenden/                  SaaS platform (framework-free, fully unit-tested)
-│   ├── services.py                 accounts, applications, decisions, dashboards, tenants
-│   ├── db.py                       SQLite / PostgreSQL (Supabase) adapter, schema, RLS
-│   ├── security.py                 PBKDF2 password hashing, JWT, role checks
-│   ├── seed.py                     demo lenders, staff and 200 borrowers
-│   └── settings.py                 environment configuration
+├── api/
+│   ├── main.py                     app, middleware (request id, security headers), error mapping
+│   ├── deps.py · schemas.py        units of work, auth dependencies, idempotency, request bodies
+│   └── routers/                    public · auth · borrower · staff · owner · files
+├── src/lenden/                     SaaS platform (framework-free, fully tested)
+│   ├── services.py                 Platform = all domain services together
+│   ├── domain/                     identity · orgs · drafts · applications · loans · notifications
+│   │                               privacy · insights · models (registry)
+│   ├── db.py · migrate.py          SQLite / PostgreSQL adapter, pool, versioned migrations
+│   ├── migrations/{sqlite,postgres}/  0001 v2 core · 0002 v3 · 0003 append-only history
+│   ├── jobs.py · notifier.py       scheduler, outbox dispatch, reminders; email/SMS + bn/en templates
+│   ├── security.py · ratelimit.py  passwords, JWT, refresh tokens, TOTP, signed links; rate limits
+│   ├── storage.py                  local disk or Supabase Storage (private bucket)
+│   └── seed.py · settings.py · clock.py · errors.py
 ├── src/credit_risk/                ML package
-│   ├── train.py                    OOF thresholds, champion selection, --exclude for fair model
-│   ├── service.py                  scoring + input validation
-│   ├── readiness.py                traffic light, actionable what-if tips, EMI / affordability
-│   ├── explain.py · costs.py · fairness.py · monitoring.py · models.py · data.py · config.py
-├── notebooks/
-│   ├── 01_credit_default_risk.ipynb   EDA → models → thresholds → calibration → SHAP
-│   └── 02_extensions.ipynb            cost sweep, capacity, fairness, drift, tuning
-├── mobile/                         Flutter app (borrower, officer, admin, owner)
-├── tests/                          33 pytest tests: model, platform services, API
-├── artifacts/                      model.joblib (research), model_fair.joblib (platform), metrics
-├── reports/figures/                charts used above
-├── Dockerfile                      multi-stage: Flutter web build + API image
-├── render.yaml · DEPLOY.md         Render blueprint + Supabase deploy guide
-└── .github/workflows/ci.yml        pytest on SQLite + Postgres, Flutter analyze/test/build
+│   ├── odds.py · offers.py · counterfactual.py · reasons.py · ladder.py · scoring.py   (v3 engine)
+│   └── train.py · service.py · readiness.py · explain.py · costs.py · fairness.py · monitoring.py
+├── mobile/                         Flutter app (lib/app, core, shared, features/*), tool/strings.py
+├── tests/                          85 pytest tests: engine, model checks, services, API, migrations
+├── notebooks/                      01 core model, 02 cost, capacity, fairness, drift, tuning
+├── artifacts/                      model_v3 (platform), model_fair (v2), model (research), metrics
+├── Dockerfile · render.yaml · DEPLOY.md
+└── .github/workflows/              ci.yml (SQLite + Postgres + Flutter), backup.yml (nightly pg_dump)
 ```
 
 ## Limitations and next steps
 
-- **Platform:** the next steps for production are migrations (Alembic), a connection pool for
-  multiple workers, refresh tokens, rate limiting, email verification and notifications.
 - **Synthetic data:** features are uniform and independent, so real credit data would behave
-  differently. Next: validate the pipeline on Home Credit or Lending Club data.
+  differently, and amounts are in the dataset's units. Taka nano-loan ranges and alternative data
+  (mobile-wallet history) need retraining on real data.
+- **Mocked money and messages:** repayments are recorded, not collected; SMS is an interface only;
+  email works with Resend or SMTP when configured.
+- **Single instance:** rate limits and the job scheduler live in the web process (jobs are locked
+  in PostgreSQL, so more instances are safe, but limits are per instance).
 - **No time-based validation or reject inference:** both are standard in real credit scoring.
-- **Costs are assumptions:** they should be estimated from actual loss data and refreshed quarterly.
-- **Fairness:** the platform model still flags marital status at some lenders. Dropping a feature is the bluntest mitigation. Next: compare reweighing and
-  constraint-based training (e.g. Fairlearn), and audit intersections such as age × marital status.
+- **Costs are assumptions:** they should come from actual loss data and be refreshed quarterly.
 
 ---
 
-*Built by [Your Name](https://github.com/your-username). Replace with your name and links.*
+*Built by [Mahmudul Hasan Joy](https://github.com/MahmudulHasanJoy).*

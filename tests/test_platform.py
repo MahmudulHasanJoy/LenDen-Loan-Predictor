@@ -1,7 +1,7 @@
-"""Service-level tests for the LenDen platform (roles, tenancy, workflow, readiness)."""
-import os
-
+"""Service-level tests for the LenDen platform (roles, tenancy, workflow, readiness). v2 behaviour."""
 import pytest
+
+from conftest import make_db
 
 from credit_risk.readiness import affordability, emi, light_for
 from lenden.settings import MODEL_PATH
@@ -11,8 +11,8 @@ pytestmark = pytest.mark.skipif(not MODEL_PATH.exists(), reason="train the fair 
 INPUTS = {
     "Income": 45000, "LoanAmount": 120000, "CreditScore": 610, "MonthsEmployed": 24,
     "NumCreditLines": 2, "InterestRate": 18.5, "LoanTerm": 60, "DTIRatio": 0.65,
-    "Education": "Bachelor's", "EmploymentType": "Part-time", "MaritalStatus": "Single",
-    "HasMortgage": "No", "HasDependents": "No", "LoanPurpose": "Home", "HasCoSigner": "No",
+    "Education": "Bachelor's", "EmploymentType": "Part-time",
+    "HasMortgage": "No", "LoanPurpose": "Home", "HasCoSigner": "No",
 }
 SAFE = {**INPUTS, "Income": 140000, "LoanAmount": 10000, "InterestRate": 4.0, "LoanTerm": 12,
         "MonthsEmployed": 110, "CreditScore": 820, "HasCoSigner": "Yes", "EmploymentType": "Full-time"}
@@ -23,15 +23,11 @@ PW = "password123"
 def world():
     """Fresh in-memory platform with two lenders, staff and two borrowers."""
     from credit_risk.service import CreditRiskService
-    from lenden import db
     from lenden.services import Platform
     # CI also runs this suite against PostgreSQL by setting TEST_DATABASE_URL.
-    database = db.connect(os.getenv("TEST_DATABASE_URL") or ":memory:")
-    if database.dialect == "postgres":
-        database.drop_all()
-        database.init_schema()
-    p = Platform(database, CreditRiskService(MODEL_PATH))
+    p = Platform(make_db(), CreditRiskService(MODEL_PATH))
     sup = p._create_user("owner@x.io", "Owner", PW, "superadmin")
+    p.set_flag(sup, "credit_ladder", False)      # v2 flows: no ladder caps (tested in test_v3.py)
     a = p.create_org(sup, "Alpha Lending", "pro", "admin@alpha.io", "Alpha Admin", PW)
     b = p.create_org(sup, "Beta Credit", "free", "admin@beta.io", "Beta Admin", PW)
     w = {"p": p, "super": sup, "alpha": a["org"], "beta": b["org"],
@@ -40,7 +36,9 @@ def world():
     w["beta_officer"] = p.add_team_member(b["admin"], "off@beta.io", "Beta Officer", PW)
     w["ann"] = p.register_borrower("ann@mail.io", "Ann", PW)["user"]
     w["bob"] = p.register_borrower("bob@mail.io", "Bob", PW)["user"]
-    return w
+    yield w
+    p.db.rollback()
+    p.db.close()
 
 
 # ------------------------------------------------------------------ readiness engine
@@ -201,7 +199,7 @@ def test_super_admin_creates_and_suspends_orgs(world):
     with pytest.raises(Forbidden):
         p.list_orgs(world["alpha_admin"])
     made = p.create_org(world["super"], "Gamma Bank", "enterprise", "boss@gamma.io", "Gamma Boss", PW)
-    assert made["org"]["slug"] == "gamma-bank"
+    assert made["org"]["slug"] == "gamma-bank" and made["org"]["currency"] == "BDT"
     assert len(p.list_orgs(world["super"])) == 3
     p.set_org_active(world["super"], world["beta"]["id"], False)
     with pytest.raises(AuthError):

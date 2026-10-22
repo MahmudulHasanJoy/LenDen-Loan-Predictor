@@ -1,178 +1,46 @@
 """Database layer: SQLite for local development, PostgreSQL (e.g. Supabase) in production.
 
-    DATABASE_URL=postgresql://...   -> PostgreSQL via psycopg 3
+    DATABASE_URL=postgresql://...   -> PostgreSQL via psycopg 3, small connection pool
     (unset)                         -> SQLite file at LENDEN_DB (default var/lenden.db)
 
 Services write SQL once with `?` placeholders; this module adapts it per dialect.
-Every tenant-owned row carries org_id; queries in services.py always filter on it.
+
+Units of work: the API wraps each request in `with db.session():`, which takes a connection
+from the pool, commits on success and rolls back on any error. Code running outside a session
+(scripts, tests, the seeder) uses one shared "default" connection and commits explicitly.
 """
 from __future__ import annotations
 
+import contextvars
+import json
+import queue
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
+
+from . import clock
 
 try:                                    # PostgreSQL driver is optional for local SQLite use
     import psycopg
 except ImportError:                     # pragma: no cover
     psycopg = None
 
-# ------------------------------------------------------------------ schemas
-SCHEMA_SQLITE = """
-PRAGMA foreign_keys = ON;
-
-CREATE TABLE IF NOT EXISTS orgs (
-    id          INTEGER PRIMARY KEY,
-    name        TEXT NOT NULL,
-    slug        TEXT NOT NULL UNIQUE,
-    plan        TEXT NOT NULL DEFAULT 'free',
-    active      INTEGER NOT NULL DEFAULT 1,
-    created_at  TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS users (
-    id            INTEGER PRIMARY KEY,
-    email         TEXT NOT NULL UNIQUE,
-    name          TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    role          TEXT NOT NULL CHECK (role IN ('borrower','officer','admin','superadmin')),
-    org_id        INTEGER REFERENCES orgs(id),
-    active        INTEGER NOT NULL DEFAULT 1,
-    created_at    TEXT NOT NULL,
-    CHECK ((role IN ('officer','admin')) = (org_id IS NOT NULL))
-);
-
-CREATE TABLE IF NOT EXISTS org_settings (
-    org_id          INTEGER PRIMARY KEY REFERENCES orgs(id),
-    cost_ratio      INTEGER NOT NULL DEFAULT 20,
-    review_capacity REAL,
-    updated_at      TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS applications (
-    id                  INTEGER PRIMARY KEY,
-    org_id              INTEGER NOT NULL REFERENCES orgs(id),
-    borrower_id         INTEGER NOT NULL REFERENCES users(id),
-    inputs              TEXT NOT NULL,
-    loan_amount         REAL NOT NULL,
-    loan_purpose        TEXT NOT NULL,
-    risk_score          REAL NOT NULL,
-    default_probability REAL NOT NULL,
-    light               TEXT NOT NULL,
-    recommendation      TEXT NOT NULL CHECK (recommendation IN ('APPROVE','REVIEW')),
-    threshold           REAL NOT NULL,
-    reasons             TEXT NOT NULL,
-    model_version       TEXT NOT NULL,
-    status              TEXT NOT NULL DEFAULT 'submitted'
-                        CHECK (status IN ('submitted','needs_docs','approved','rejected')),
-    consent_at          TEXT NOT NULL,
-    created_at          TEXT NOT NULL,
-    decided_at          TEXT,
-    decided_by          INTEGER REFERENCES users(id),
-    decision_note       TEXT
-);
-CREATE INDEX IF NOT EXISTS ix_app_org_status ON applications(org_id, status);
-CREATE INDEX IF NOT EXISTS ix_app_borrower ON applications(borrower_id);
-CREATE INDEX IF NOT EXISTS ix_app_decided_by ON applications(decided_by);
-CREATE INDEX IF NOT EXISTS ix_users_org ON users(org_id);
-
-CREATE TABLE IF NOT EXISTS audit_log (
-    id         INTEGER PRIMARY KEY,
-    org_id     INTEGER,
-    user_id    INTEGER,
-    action     TEXT NOT NULL,
-    target     TEXT,
-    detail     TEXT,
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS ix_audit_org ON audit_log(org_id, id);
-"""
-
-# Same tables for PostgreSQL. Timestamps stay ISO-8601 text so both dialects behave identically.
-SCHEMA_POSTGRES = """
-CREATE TABLE IF NOT EXISTS orgs (
-    id          SERIAL PRIMARY KEY,
-    name        TEXT NOT NULL,
-    slug        TEXT NOT NULL UNIQUE,
-    plan        TEXT NOT NULL DEFAULT 'free',
-    active      INTEGER NOT NULL DEFAULT 1,
-    created_at  TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS users (
-    id            SERIAL PRIMARY KEY,
-    email         TEXT NOT NULL UNIQUE,
-    name          TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    role          TEXT NOT NULL CHECK (role IN ('borrower','officer','admin','superadmin')),
-    org_id        INTEGER REFERENCES orgs(id),
-    active        INTEGER NOT NULL DEFAULT 1,
-    created_at    TEXT NOT NULL,
-    CHECK ((role IN ('officer','admin')) = (org_id IS NOT NULL))
-);
-
-CREATE TABLE IF NOT EXISTS org_settings (
-    org_id          INTEGER PRIMARY KEY REFERENCES orgs(id),
-    cost_ratio      INTEGER NOT NULL DEFAULT 20,
-    review_capacity DOUBLE PRECISION,
-    updated_at      TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS applications (
-    id                  SERIAL PRIMARY KEY,
-    org_id              INTEGER NOT NULL REFERENCES orgs(id),
-    borrower_id         INTEGER NOT NULL REFERENCES users(id),
-    inputs              TEXT NOT NULL,
-    loan_amount         DOUBLE PRECISION NOT NULL,
-    loan_purpose        TEXT NOT NULL,
-    risk_score          DOUBLE PRECISION NOT NULL,
-    default_probability DOUBLE PRECISION NOT NULL,
-    light               TEXT NOT NULL,
-    recommendation      TEXT NOT NULL CHECK (recommendation IN ('APPROVE','REVIEW')),
-    threshold           DOUBLE PRECISION NOT NULL,
-    reasons             TEXT NOT NULL,
-    model_version       TEXT NOT NULL,
-    status              TEXT NOT NULL DEFAULT 'submitted'
-                        CHECK (status IN ('submitted','needs_docs','approved','rejected')),
-    consent_at          TEXT NOT NULL,
-    created_at          TEXT NOT NULL,
-    decided_at          TEXT,
-    decided_by          INTEGER REFERENCES users(id),
-    decision_note       TEXT
-);
-CREATE INDEX IF NOT EXISTS ix_app_org_status ON applications(org_id, status);
-CREATE INDEX IF NOT EXISTS ix_app_borrower ON applications(borrower_id);
-CREATE INDEX IF NOT EXISTS ix_app_decided_by ON applications(decided_by);
-CREATE INDEX IF NOT EXISTS ix_users_org ON users(org_id);
-
-CREATE TABLE IF NOT EXISTS audit_log (
-    id         SERIAL PRIMARY KEY,
-    org_id     INTEGER,
-    user_id    INTEGER,
-    action     TEXT NOT NULL,
-    target     TEXT,
-    detail     TEXT,
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS ix_audit_org ON audit_log(org_id, id);
-
--- Supabase exposes the public schema through its REST API. LenDen does not use that API,
--- so row-level security with no policies blocks it entirely. The backend connects as the
--- table owner, which bypasses RLS, so the app is unaffected.
-ALTER TABLE orgs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE org_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
-"""
-
-TABLES = ("audit_log", "applications", "org_settings", "users", "orgs")   # drop order
-JSON_COLS = ("inputs", "reasons")
+# Every LenDen table, in a safe drop order (children first).
+TABLES = (
+    "shadow_scores", "drift_snapshots", "idempotency_keys", "job_runs", "feature_flags",
+    "password_resets", "otp_codes", "refresh_tokens", "outbox", "notifications", "consents",
+    "borrower_levels", "repayments", "loans", "documents", "document_requests",
+    "application_events", "applications", "offers", "drafts", "model_versions", "audit_log",
+    "org_settings", "users", "orgs", "schema_migrations",
+)
+JSON_COLS = ("inputs", "reasons", "reason_codes", "payload", "items", "metrics", "features",
+             "report", "detail", "offer_rules", "terms", "demographics", "prefs", "response",
+             "counterfactual", "notification_prefs")
 
 
 def now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return clock.iso()
 
 
 def to_postgres(sql: str) -> str:
@@ -207,6 +75,7 @@ class _PgCursor:
     def __init__(self, cur):
         self._cur = cur
         self._keys = [d.name for d in cur.description] if cur.description else []
+        self.rowcount = cur.rowcount
 
     def fetchone(self):
         r = self._cur.fetchone()
@@ -216,18 +85,30 @@ class _PgCursor:
         return [Row(self._keys, r) for r in self._cur.fetchall()]
 
 
-class Database:
-    """One connection shared by the app (the API serialises access with a lock)."""
+class _Conn:
+    """A raw connection plus the number of statements run since the last commit."""
+    __slots__ = ("raw", "pending")
 
-    def __init__(self, target: str | Path = ":memory:"):
+    def __init__(self, raw):
+        self.raw, self.pending = raw, 0
+
+
+class Database:
+    def __init__(self, target: str | Path = ":memory:", pool_size: int = 5, migrate: bool = True):
         self.url = str(target)
         self.dialect = "postgres" if is_postgres_url(self.url) else "sqlite"
-        self._lock = threading.RLock()
-        self._pending = 0          # statements since last commit/rollback
-        self._conn = self._open()
-        self.init_schema()
+        self._lock = threading.RLock()        # guards the default connection (and all of SQLite)
+        self._bound: contextvars.ContextVar = contextvars.ContextVar(f"lenden_db_{id(self)}", default=None)
+        self._pool: queue.LifoQueue = queue.LifoQueue()
+        self._max = max(1, pool_size)
+        self._opened = 0
+        self._pool_lock = threading.Lock()
+        self._default = _Conn(self._open())
+        if migrate:
+            from .migrate import migrate as run_migrations
+            run_migrations(self)
 
-    # ---------------------------------------------------------- connection
+    # ---------------------------------------------------------- connections
     def _open(self):
         if self.dialect == "postgres":
             if psycopg is None:
@@ -242,40 +123,106 @@ class Database:
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
+    def _checkout(self) -> _Conn:
+        try:
+            c = self._pool.get_nowait()
+        except queue.Empty:
+            with self._pool_lock:
+                can_open = self._opened < self._max
+                if can_open:
+                    self._opened += 1
+            if can_open:
+                try:
+                    return _Conn(self._open())
+                except Exception:
+                    with self._pool_lock:
+                        self._opened -= 1
+                    raise
+            c = self._pool.get(timeout=30)
+        if c.raw.closed:
+            try:
+                c.raw = self._open()
+            except Exception:
+                with self._pool_lock:
+                    self._opened -= 1
+                raise
+        return c
+
+    def _checkin(self, c: _Conn) -> None:
+        if c.raw.closed:
+            with self._pool_lock:
+                self._opened -= 1
+            return
+        self._pool.put(c)
+
+    @contextmanager
+    def session(self):
+        """One unit of work: commit on success, roll back on error. Nested calls join the outer one."""
+        if self._bound.get() is not None:
+            yield self
+            return
+        if self.dialect == "sqlite":
+            with self._lock:
+                token = self._bound.set(self._default)
+                try:
+                    yield self
+                    self.commit()
+                except BaseException:
+                    self.rollback()
+                    raise
+                finally:
+                    self._bound.reset(token)
+            return
+        c = self._checkout()
+        token = self._bound.set(c)
+        try:
+            yield self
+            self.commit()
+        except BaseException:
+            self.rollback()
+            raise
+        finally:
+            self._bound.reset(token)
+            self._checkin(c)
+
+    def _current(self) -> _Conn:
+        return self._bound.get() or self._default
+
     @property
     def IntegrityError(self):            # noqa: N802 - mirrors the DB-API name
         errs = (sqlite3.IntegrityError,)
         return errs + (psycopg.IntegrityError,) if psycopg else errs
 
-    def _reconnect_if_safe(self, exc) -> bool:
+    def _reconnect_if_safe(self, c: _Conn, exc) -> bool:
         """Re-open a dropped PostgreSQL connection (poolers close idle ones), if no work would be lost."""
-        if self.dialect != "postgres" or self._pending:
+        if self.dialect != "postgres" or c.pending:
             return False
-        if not isinstance(exc, psycopg.OperationalError) and not self._conn.closed:
+        if not isinstance(exc, psycopg.OperationalError) and not c.raw.closed:
             return False
         try:
-            self._conn.close()
+            c.raw.close()
         except Exception:
             pass
-        self._conn = self._open()
+        c.raw = self._open()
         return True
 
     # ---------------------------------------------------------- statements
     def execute(self, sql: str, args=()):
-        with self._lock:
+        c = self._current()
+        with (self._lock if c is self._default else nullcontext()):
             if self.dialect == "sqlite":
-                cur = self._conn.execute(sql, args)
-                self._pending += 1
+                cur = c.raw.execute(sql, tuple(args))
+                c.pending += 1
                 return cur
             try:
-                cur = self._conn.execute(to_postgres(sql), tuple(args))
+                cur = c.raw.execute(to_postgres(sql), tuple(args))
             except Exception as e:
                 if psycopg and isinstance(e, (psycopg.OperationalError, psycopg.InterfaceError)) \
-                        and self._reconnect_if_safe(e):
-                    cur = self._conn.execute(to_postgres(sql), tuple(args))
+                        and self._reconnect_if_safe(c, e):
+                    cur = c.raw.execute(to_postgres(sql), tuple(args))
                 else:
                     raise
-            self._pending += 1
+            c.pending += 1
             return _PgCursor(cur)
 
     def insert(self, sql: str, args=()) -> int:
@@ -284,52 +231,74 @@ class Database:
             return self.execute(sql, args).lastrowid
         return self.execute(sql.rstrip().rstrip(";") + " RETURNING id", args).fetchone()[0]
 
-    def commit(self):
+    def script(self, sql: str) -> None:
+        """Run several statements (migrations). Commits."""
+        c = self._current()
         with self._lock:
-            self._conn.commit()
-            self._pending = 0
+            if self.dialect == "sqlite":
+                c.raw.executescript(sql)
+            else:
+                c.raw.execute(sql)
+                c.raw.commit()
+            c.pending = 0
+
+    def commit(self):
+        c = self._current()
+        with (self._lock if c is self._default else nullcontext()):
+            c.raw.commit()
+            c.pending = 0
 
     def rollback(self):
-        with self._lock:
+        c = self._current()
+        with (self._lock if c is self._default else nullcontext()):
             try:
-                self._conn.rollback()
+                c.raw.rollback()
             finally:
-                self._pending = 0
+                c.pending = 0
+
+    def try_lock(self, key: int) -> bool:
+        """Cluster-wide lock for background jobs (PostgreSQL advisory lock; always true on SQLite)."""
+        if self.dialect == "sqlite":
+            return True
+        return bool(self.execute("SELECT pg_try_advisory_xact_lock(?)", (key,)).fetchone()[0])
 
     # ---------------------------------------------------------- schema
     def init_schema(self):
-        with self._lock:
-            if self.dialect == "sqlite":
-                self._conn.executescript(SCHEMA_SQLITE)
-            else:
-                self._conn.execute(SCHEMA_POSTGRES)
-                self._conn.commit()
-            self._pending = 0
+        from .migrate import migrate as run_migrations
+        run_migrations(self)
 
     def drop_all(self):
         """Delete every LenDen table (tests and `seed --reset` only)."""
         with self._lock:
+            c = self._default
             for t in TABLES:
-                self._conn.execute(f"DROP TABLE IF EXISTS {t}" + (" CASCADE" if self.dialect == "postgres" else ""))
-            self._conn.commit()
-            self._pending = 0
+                c.raw.execute(f"DROP TABLE IF EXISTS {t}" + (" CASCADE" if self.dialect == "postgres" else ""))
+            c.raw.commit()
+            c.pending = 0
 
     def close(self):
-        self._conn.close()
+        self._default.raw.close()
+        while True:
+            try:
+                self._pool.get_nowait().raw.close()
+            except queue.Empty:
+                break
 
 
-def connect(target: str | Path = ":memory:") -> Database:
-    return Database(target)
+def connect(target: str | Path = ":memory:", pool_size: int = 5, migrate: bool = True) -> Database:
+    return Database(target, pool_size=pool_size, migrate=migrate)
 
 
 def row(r) -> dict | None:
-    import json
     if r is None:
         return None
     d = dict(zip(r.keys(), [r[k] for k in r.keys()]))
     for c in JSON_COLS:
         if c in d and isinstance(d[c], str):
-            d[c] = json.loads(d[c])
+            try:
+                d[c] = json.loads(d[c])
+            except ValueError:
+                pass
     return d
 
 

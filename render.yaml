@@ -16,3 +16,13 @@ services:
         generateValue: true    # Render creates a random secret
       - key: LENDEN_SEED_DEMO
         value: "1"             # fill an empty database with demo data on first start
+      - key: LENDEN_RUN_JOBS
+        value: "1"             # background jobs inside the web process (free tier)
+      - key: LENDEN_DEV_EXPOSE_CODES
+        value: "1"             # DEMO ONLY: shows OTP codes and reset links in the app. Set 0 for real users.
+      - key: LENDEN_CORS_ORIGINS
+        value: "*"             # the web app is same-origin; restrict this if other sites call the API
+      - key: RESEND_API_KEY
+        sync: false            # optional: real emails via resend.com
+      - key: SENTRY_DSN
+        sync: false            # optional: error tracking

@@ -35,7 +35,7 @@ whenever Render restarts. To store data permanently in Supabase:
    and set **Key** `DATABASE_URL` and **Value** the URI from step 2. Click **Save, rebuild and deploy**.
 4. **Check it worked.**
    - https://lenden-qydc.onrender.com/health should show `"database": "postgres"`.
-   - The Render logs should show `LenDen: demo data created.`
+   - The Render logs should show `{"event": "demo_seeded"}`.
    - Supabase **Table Editor** should show rows in `orgs`, `users` and `applications`.
 
 Never commit the connection string or paste it into chats. If it leaks, reset the database
@@ -122,6 +122,48 @@ Or keep your current build and set the address under **Server settings** in the 
 
 ---
 
+## Upgrading the live v2 service to v3
+
+v3 upgrades the database in place: on start the API runs `python -m lenden.migrate`, which
+adds the new tables and columns (migrations `0001`–`0003`) and keeps all v2 data. Nothing to do by
+hand. After the deploy:
+
+- `/health` shows `"version": "3.0.0"` and `"model_version": "lenden-v3"`.
+- An **existing** demo database keeps its v2 data; the new features (offers, loans, credit levels)
+  start empty for those accounts. For the full v3 demo, reset the demo data (see below).
+- v2 apps already installed keep working: every v2 path is still served next to `/v1`.
+
+### Environment variables
+
+| Variable | Needed | What it does |
+|---|---|---|
+| `DATABASE_URL` | yes (production) | Supabase session-pooler URI. Without it the API uses a temporary SQLite file. |
+| `LENDEN_JWT_SECRET` | yes | Signs access tokens and file links. Render generates it. |
+| `LENDEN_SEED_DEMO` | no (default `1`) | Fill an empty database with demo data. |
+| `LENDEN_RUN_JOBS` | no (default `1`) | Run background jobs (reminders, repayment checks, drift, email) in the web process. |
+| `LENDEN_DEV_EXPOSE_CODES` | demo only | Show login codes and reset links on screen, **only for demo accounts**. Set `0` for real users. |
+| `RESEND_API_KEY` or `SMTP_HOST`/`SMTP_USER`/`SMTP_PASSWORD` | no | Send real emails. Otherwise emails are written to the log. |
+| `LENDEN_MAIL_FROM` | no | Sender, e.g. `LenDen <no-reply@yourdomain>`. |
+| `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` | no | Store uploaded documents in a private Supabase Storage bucket (`lenden-docs`). Otherwise they are kept on the server's disk, which Render's free tier wipes on restart. |
+| `SENTRY_DSN` | no | Error tracking (also `pip install sentry-sdk`). |
+| `LENDEN_CORS_ORIGINS` | no | Comma-separated origins allowed to call the API from other sites. |
+| `LENDEN_PUBLIC_URL` | no | Used in password-reset links, e.g. `https://lenden-qydc.onrender.com`. |
+
+Keep secrets in Render's **Environment** tab only, never in the repo or in chats.
+
+### Nightly backups (optional)
+
+`.github/workflows/backup.yml` runs `pg_dump` every night and keeps the dump for 7 days as a
+workflow artifact. To turn it on, add `DATABASE_URL` as a repository secret in GitHub
+(**Settings → Secrets and variables → Actions**). It also counts as activity, so the Supabase
+free project is not paused.
+
+### Safer releases
+
+Push v3 to a branch first (for example `develop`) and open a pull request: CI runs the backend tests
+on SQLite and PostgreSQL and builds the Flutter app. Merge to `main` only when it is green, and Render
+deploys it. A failed Render build never replaces the running version.
+
 ## Good to know (free tiers)
 
 | | What happens | What to do |
@@ -138,7 +180,7 @@ From your computer, inside the project folder:
 $env:DATABASE_URL = "postgresql://postgres.xxxx:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
 pip install -r requirements-api.txt
 $env:PYTHONPATH = "src"
-python -m lenden.seed --reset      # deletes ALL LenDen tables, then re-creates demo data
+python -m lenden.seed --reset      # deletes ALL LenDen tables, re-runs migrations, re-creates demo data
 ```
 
 ### Going beyond a demo
@@ -155,7 +197,7 @@ python -m lenden.seed --reset      # deletes ALL LenDen tables, then re-creates 
 | Render log: `connection ... Network is unreachable` | You used the **direct** connection string. Use the **Session pooler** URI. |
 | `password authentication failed` | Wrong password in `DATABASE_URL`, or `[ ]` brackets left in. |
 | `/health` shows `"database": "sqlite"` | `DATABASE_URL` isn't set on the Render service (Environment tab). |
-| App opens but says it can't reach the server | Wait for "demo data created" in the Render logs, then refresh. |
+| App opens but says it can't reach the server | Wait for `demo_seeded` in the Render logs (about 1–3 minutes on the free tier), then refresh. |
 | Supabase "project paused" | Dashboard → Resume. |
 | Build fails at `flutter build web` | Copy the error from the Render log. It's a Dart compile error to fix in `mobile/lib`. |
 
